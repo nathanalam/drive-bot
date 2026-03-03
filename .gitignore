@@ -12,9 +12,11 @@ wheels/
 # Google Service Account
 service_account.json
 service-account.json
+oauth_credentials.json
 
 # Agent files
 memories.json
 skills.json
 todo.json
 config.json
+token.json
