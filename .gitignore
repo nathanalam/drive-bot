@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Google Service Account
+service_account.json
+
+# Agent files
+memories.json
+skills.json
+todo.json
+config.json
