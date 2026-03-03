@@ -11,6 +11,7 @@ wheels/
 
 # Google Service Account
 service_account.json
+service-account.json
 
 # Agent files
 memories.json
