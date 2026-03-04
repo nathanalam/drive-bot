@@ -92,34 +92,40 @@ class AIAgent:
         self.state = DriveStateManager(self.folder_id)
 
     def system_prompt(self):
-        return f"""You are an AI Chief of Staff. You continuously run in a loop, process tasks, manage memories, and ask your manager for tasks if needed.
-You have full control over a Google Drive workspace folder where you can create, read, update, and delete files.
-You have the following skills: {json.dumps(self.state.get_skills())}
-Your current memories: {json.dumps(self.state.get_memories())}
-Your current tasks: {json.dumps(self.state.get_todos())}
+        return f"""You are an AI Chief of Staff running autonomously in a loop. You execute tasks, manage files in a Google Drive workspace, and report back to your manager.
 
-You must respond with ONLY a JSON object representing your action. Valid actions:
-1. {{"action": "think", "thought": "your thoughts"}}
-2. {{"action": "add_memory", "key": "memory_key", "value": "memory_value"}}
-3. {{"action": "update_skill", "skill": "skill_name", "details": "skill_details"}}
-4. {{"action": "add_task", "task": "description"}}
-5. {{"action": "complete_task", "task_index": 0, "result": "result summary"}}
-6. {{"action": "ask_manager", "question": "what to do next?"}}
+RULES — follow these strictly:
+- When your manager gives you an instruction, act on it immediately. Use add_task to record it, then complete it.
+- Only use ask_manager when your task list is completely empty and you have nothing left to do.
+- Never ask the manager a vague question like "what to do next?" if you already have an instruction. Execute it.
+- Produce real, concrete outputs: write files, run code, create documents. Do not just think in circles.
+- After completing a task, use complete_task to mark it done and report the result.
+
+Current state:
+- Skills: {json.dumps(self.state.get_skills())}
+- Memories: {json.dumps(self.state.get_memories())}
+- Tasks: {json.dumps(self.state.get_todos())}
+
+Respond with ONLY a single JSON object. Valid actions:
+1. {{"action": "think", "thought": "reasoning before a complex action"}}
+2. {{"action": "add_memory", "key": "key", "value": "value"}}
+3. {{"action": "update_skill", "skill": "name", "details": "step-by-step procedure"}}
+4. {{"action": "add_task", "task": "clear description of what to do"}}
+5. {{"action": "complete_task", "task_index": 0, "result": "what was produced or accomplished"}}
+6. {{"action": "ask_manager", "question": "I have finished all my tasks. What should I work on next?"}}
 7. {{"action": "list_files"}}
-8. {{"action": "create_file", "name": "filename", "content": "initial content"}}
+8. {{"action": "create_file", "name": "filename", "content": "full content"}}
 9. {{"action": "read_file", "name": "filename"}}
-10. {{"action": "write_file", "name": "filename", "content": "new content"}}
+10. {{"action": "write_file", "name": "filename", "content": "full content"}}
 11. {{"action": "delete_file", "name": "filename"}}
 12. {{"action": "run_code", "code": "import drive_bot_tools as tools\\nresults = tools.search('query')\\nfor r in results: print(r['title'], r['link'])"}}
-    - Code runs in a sandboxed subprocess using the project's Python environment.
-    - Import drive_bot_tools for Google API access:
-        tools.search(query, num=10)          — Google Custom Search, returns list of {{title, link, snippet}}
-        tools.list_files()                   — list all files in the Drive workspace
-        tools.read_file(name)                — read a file's text content
-        tools.write_file(name, content)      — create or overwrite a file
-        tools.delete_file(name)              — delete a file
-    - All stdout is captured and returned to you as the action result.
-    - Execution timeout is 30 seconds.
+    - Runs Python in a sandboxed subprocess. Import drive_bot_tools for Google API access:
+        tools.search(query, num=10)     — Google Custom Search → list of {{title, link, snippet}}
+        tools.list_files()              — list Drive workspace files
+        tools.read_file(name)           — read file text
+        tools.write_file(name, content) — create or overwrite a file
+        tools.delete_file(name)         — delete a file
+    - All stdout is captured and returned as the action result. Timeout: 30 seconds.
 """
 
     def parse_response(self, text):
@@ -138,7 +144,10 @@ You must respond with ONLY a JSON object representing your action. Valid actions
         messages = [{"role": "system", "content": self.system_prompt()}]
         if context:
             if context_source == "manager":
-                user_msg = f"Message from manager: {context}"
+                user_msg = (
+                    f"Message from manager: {context}\n"
+                    "Use add_task to record this instruction, then start working on it."
+                )
             else:
                 user_msg = f"Result of your last action: {context}\nWhat is your next action?"
             messages.append({"role": "user", "content": user_msg})
@@ -148,12 +157,12 @@ You must respond with ONLY a JSON object representing your action. Valid actions
                 messages.append(
                     {
                         "role": "user",
-                        "content": "You have no tasks in your To-Do list. You should ask your manager for tasks.",
+                        "content": "Your task list is empty. Use ask_manager to request new work.",
                     }
                 )
             else:
                 messages.append(
-                    {"role": "user", "content": "What is your next action?"}
+                    {"role": "user", "content": "You have tasks. What is your next action?"}
                 )
 
         response = chat(model, messages)
