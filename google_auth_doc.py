@@ -26,7 +26,9 @@ def save_client_secrets(source_path: str) -> Optional[str]:
                 "Download 'Desktop app' credentials from Google Cloud Console "
                 "→ APIs & Services → Credentials."
             )
-        shutil.copyfile(source_path, CLIENT_SECRETS_PATH)
+        # Skip copy if source is already the destination file
+        if os.path.abspath(source_path) != os.path.abspath(CLIENT_SECRETS_PATH):
+            shutil.copyfile(source_path, CLIENT_SECRETS_PATH)
         return None
     except Exception as e:
         return str(e)
@@ -165,6 +167,109 @@ def delete_file_by_id(file_id: str) -> bool:
         return True
     except Exception as e:
         print(f"Error deleting file: {e}")
+        return False
+
+
+def create_folder_in_folder(name: str, parent_id: str) -> Optional[str]:
+    """Creates a subfolder inside *parent_id*. Returns the new folder's ID."""
+    service = get_drive_service()
+    if not service:
+        return None
+    try:
+        metadata: Dict[str, Any] = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id],
+        }
+        f = (
+            service.files()
+            .create(body=metadata, fields="id", supportsAllDrives=True)
+            .execute()
+        )
+        return f.get("id")
+    except Exception as e:
+        print(f"Error creating folder '{name}': {e}")
+        return None
+
+
+def list_files_recursive(
+    folder_id: str, _prefix: str = ""
+) -> List[Dict[str, str]]:
+    """Walk a folder tree and return every file/subfolder with a ``path`` key.
+
+    Each entry has keys: ``id``, ``name``, ``mimeType``, ``path``.
+    """
+    results: List[Dict[str, str]] = []
+    for f in list_files_in_folder(folder_id):
+        path = f"{_prefix}{f['name']}"
+        entry = {**f, "path": path}
+        results.append(entry)
+        if f["mimeType"] == "application/vnd.google-apps.folder":
+            results.extend(list_files_recursive(f["id"], f"{path}/"))
+    return results
+
+
+def move_file_to_folder(file_id: str, new_parent_id: str) -> bool:
+    """Move a file to a different folder."""
+    service = get_drive_service()
+    if not service:
+        return False
+    try:
+        # Get current parents to remove
+        f = (
+            service.files()
+            .get(fileId=file_id, fields="parents", supportsAllDrives=True)
+            .execute()
+        )
+        previous_parents = ",".join(f.get("parents", []))
+        service.files().update(
+            fileId=file_id,
+            addParents=new_parent_id,
+            removeParents=previous_parents,
+            fields="id, parents",
+            supportsAllDrives=True,
+        ).execute()
+        return True
+    except Exception as e:
+        print(f"Error moving file: {e}")
+        return False
+
+
+def copy_file_by_id(
+    file_id: str, new_name: str, parent_id: str
+) -> Optional[str]:
+    """Copy a file into *parent_id* with a new name. Returns the copy's ID."""
+    service = get_drive_service()
+    if not service:
+        return None
+    try:
+        body: Dict[str, Any] = {"name": new_name, "parents": [parent_id]}
+        f = (
+            service.files()
+            .copy(fileId=file_id, body=body, fields="id", supportsAllDrives=True)
+            .execute()
+        )
+        return f.get("id")
+    except Exception as e:
+        print(f"Error copying file: {e}")
+        return None
+
+
+def rename_file_by_id(file_id: str, new_name: str) -> bool:
+    """Rename a file in Drive."""
+    service = get_drive_service()
+    if not service:
+        return False
+    try:
+        service.files().update(
+            fileId=file_id,
+            body={"name": new_name},
+            fields="id, name",
+            supportsAllDrives=True,
+        ).execute()
+        return True
+    except Exception as e:
+        print(f"Error renaming file: {e}")
         return False
 
 
